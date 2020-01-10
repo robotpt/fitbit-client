@@ -17,7 +17,7 @@ class FitbitApiError(Exception):
     pass
 
 
-class BackendFitbitClient:
+class FitbitClient:
 
     class Oauth2Fields:
         ACCESS_TOKEN = 'access_token'
@@ -136,21 +136,22 @@ class BackendFitbitClient:
             self._scope = response[self.Oauth2Fields.SCOPE]
             self._user_id = response[self.Oauth2Fields.USER_ID]
 
-    @staticmethod
-    def _get_error_message_from_get_response(response):
-        error_message = "\n"
-        for e in response['errors']:
-            error_message += "\t{}:\n".format(e["errorType"]) + textwrap.indent(
-                textwrap.fill(e['message']), prefix='\t\t'
-            ) + "\n"
-        return error_message
+    def get_url(self, url):
+        headers = {"Authorization": "Bearer {}".format(self._access_token)}
+        logging.info("GET request to '{}'".format(url))
+        response = requests.get(
+            url=url,
+            headers=headers
+        ).json()
+        self._check_response_for_errors(response)
+        return response
 
     def get_last_sync(self):
         url = "https://{api_url}/1/user/{user_id}/devices.json".format(
             api_url=self.FitbitApi.API_URL,
             user_id=self._user_id,
         )
-        response = self._request_data(url)
+        response = self.get_url(url)
         data_idx = 0
         last_sync_str = response[data_idx][self.FitbitApi.LAST_SYNC_KEY]+"000"  # zeros pad microseconds for parsing
         str_format = "%Y-%m-%dT%H:%M:%S.%f"
@@ -164,8 +165,17 @@ class BackendFitbitClient:
             date=self._date_to_fitbit_date_string(date),
             detail_level=self.FitbitApi.STEPS_DETAIL_LEVEL_1_MIN,
         )
-        response = self._request_data(url)
+        response = self.get_url(url)
         return self._steps_response_to_dataframe(response)
+
+    @staticmethod
+    def _get_error_message_from_get_response(response):
+        error_message = "\n"
+        for e in response['errors']:
+            error_message += "\t{}:\n".format(e["errorType"]) + textwrap.indent(
+                textwrap.fill(e['message']), prefix='\t\t'
+            ) + "\n"
+        return error_message
 
     @staticmethod
     def _steps_response_to_dataframe(response):
@@ -175,16 +185,6 @@ class BackendFitbitClient:
             steps.append(i['value'])
             times.append(i['time'])
         return pandas.DataFrame({'Time': times, 'Steps': steps})
-
-    def _request_data(self, url):
-        headers = {"Authorization": "Bearer {}".format(self._access_token)}
-        logging.info("GET request to '{}'".format(url))
-        response = requests.get(
-            url=url,
-            headers=headers
-        ).json()
-        self._check_response_for_errors(response)
-        return response
 
     @staticmethod
     def _check_response_for_errors(response):
@@ -198,7 +198,7 @@ class BackendFitbitClient:
                 raise TypeError("response should be a dictionary or a list of dictionaries")
             if 'success' in r.keys():
                 if r['success'] is False:
-                    error_message = BackendFitbitClient._get_error_message_from_get_response(response)
+                    error_message = FitbitClient._get_error_message_from_get_response(response)
                     logging.error(error_message, exc_info=True)
                     raise FitbitCredentialsError(error_message)
 

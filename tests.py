@@ -1,16 +1,16 @@
 import unittest
 from unittest import mock
-from backend_fitbit_client import BackendFitbitClient, FitbitApiError, FitbitCredentialsError
+from fitbit_client import FitbitClient, FitbitApiError, FitbitCredentialsError
 import logging
 
 logging.basicConfig(level=None)
 
-class TestBackendFitbitCaller(unittest.TestCase):
+class TestFitbitCaller(unittest.TestCase):
 
-    @mock.patch('backend_fitbit_client.yaml')
-    @mock.patch('backend_fitbit_client.requests')
-    @mock.patch('backend_fitbit_client.os.path.exists')
-    @mock.patch('backend_fitbit_client.input')
+    @mock.patch('fitbit_client.yaml')
+    @mock.patch('fitbit_client.requests')
+    @mock.patch('fitbit_client.os.path.exists')
+    @mock.patch('fitbit_client.input')
     def test_create_token_file_from_user_input(
             self, input_mock, exists_mock, requests_mock, yaml_mock
     ):
@@ -29,7 +29,7 @@ class TestBackendFitbitCaller(unittest.TestCase):
         response_mock.json.return_value = foo_token
         requests_mock.post.return_value = response_mock
 
-        BackendFitbitClient()
+        FitbitClient()
 
         assert input_mock.call_count == 3
         response_mock.json.assert_called()
@@ -38,10 +38,10 @@ class TestBackendFitbitCaller(unittest.TestCase):
         saved_dict = yaml_mock.dump.call_args[0][0]
         assert saved_dict == foo_token
 
-    @mock.patch('backend_fitbit_client.yaml')
-    @mock.patch('backend_fitbit_client.requests')
-    @mock.patch('backend_fitbit_client.os.path.exists')
-    @mock.patch('backend_fitbit_client.input')
+    @mock.patch('fitbit_client.yaml')
+    @mock.patch('fitbit_client.requests')
+    @mock.patch('fitbit_client.os.path.exists')
+    @mock.patch('fitbit_client.input')
     def test_create_token_file_from_args(
             self, input_mock, exists_mock, requests_mock, yaml_mock
     ):
@@ -60,7 +60,7 @@ class TestBackendFitbitCaller(unittest.TestCase):
         response_mock.json.return_value = foo_token
         requests_mock.post.return_value = response_mock
 
-        BackendFitbitClient(client_id='foo', code='bar', authorization='baz')
+        FitbitClient(client_id='foo', code='bar', authorization='baz')
 
         assert input_mock.call_count == 0
         response_mock.json.assert_called()
@@ -69,9 +69,9 @@ class TestBackendFitbitCaller(unittest.TestCase):
         saved_dict = yaml_mock.dump.call_args[0][0]
         assert saved_dict == foo_token
 
-    @mock.patch('backend_fitbit_client.yaml')
-    @mock.patch('backend_fitbit_client.os.path.exists')
-    @mock.patch('backend_fitbit_client.input')
+    @mock.patch('fitbit_client.yaml')
+    @mock.patch('fitbit_client.os.path.exists')
+    @mock.patch('fitbit_client.input')
     def test_load_token_file(self, input_mock, exists_mock, yaml_mock):
 
         foo_access_token = 'access'
@@ -86,15 +86,15 @@ class TestBackendFitbitCaller(unittest.TestCase):
         exists_mock.return_value = True
         yaml_mock.load.return_value = foo_token
 
-        BackendFitbitClient()
+        FitbitClient()
 
         assert input_mock.call_count == 0
         yaml_mock.load.assert_called()
 
-    @mock.patch('backend_fitbit_client.yaml')
-    @mock.patch('backend_fitbit_client.os.path.exists')
-    @mock.patch('backend_fitbit_client.requests')
-    @mock.patch('backend_fitbit_client.input')
+    @mock.patch('fitbit_client.yaml')
+    @mock.patch('fitbit_client.os.path.exists')
+    @mock.patch('fitbit_client.requests')
+    @mock.patch('fitbit_client.input')
     def test_prompt_user_for_credentials_if_a_bad_token_is_stored(
             self, input_mock, requests_mock, exists_mock, yaml_mock
     ):
@@ -115,7 +115,7 @@ class TestBackendFitbitCaller(unittest.TestCase):
         response_mock.json.return_value = good_token
         requests_mock.post.return_value = response_mock
 
-        BackendFitbitClient()
+        FitbitClient()
 
         assert input_mock.call_count == 3
         yaml_mock.load.assert_called()
@@ -123,10 +123,10 @@ class TestBackendFitbitCaller(unittest.TestCase):
         saved_dict = yaml_mock.dump.call_args[0][0]
         assert saved_dict == good_token
 
-    @mock.patch('backend_fitbit_client.yaml')
-    @mock.patch('backend_fitbit_client.requests')
-    @mock.patch('backend_fitbit_client.os.path.exists')
-    @mock.patch('backend_fitbit_client.input')
+    @mock.patch('fitbit_client.yaml')
+    @mock.patch('fitbit_client.requests')
+    @mock.patch('fitbit_client.os.path.exists')
+    @mock.patch('fitbit_client.input')
     def test_credentials_error(
             self, _, exists_mock, requests_mock, yaml_mock
     ):
@@ -151,15 +151,15 @@ class TestBackendFitbitCaller(unittest.TestCase):
 
         self.assertRaises(
             FitbitCredentialsError,
-            BackendFitbitClient,
+            FitbitClient,
         )
 
         assert yaml_mock.dump.call_count == 0
 
-    @mock.patch('backend_fitbit_client.yaml')
-    @mock.patch('backend_fitbit_client.requests')
-    @mock.patch('backend_fitbit_client.os.path.exists')
-    @mock.patch('backend_fitbit_client.input')
+    @mock.patch('fitbit_client.yaml')
+    @mock.patch('fitbit_client.requests')
+    @mock.patch('fitbit_client.os.path.exists')
+    @mock.patch('fitbit_client.input')
     def test_bad_api_return(
             self, _, exists_mock, requests_mock, yaml_mock
     ):
@@ -174,15 +174,15 @@ class TestBackendFitbitCaller(unittest.TestCase):
 
         self.assertRaises(
             FitbitApiError,
-            BackendFitbitClient,
+            FitbitClient,
         )
 
         assert yaml_mock.dump.call_count == 0
 
-    @mock.patch('backend_fitbit_client.yaml')
-    @mock.patch('backend_fitbit_client.requests')
-    @mock.patch('backend_fitbit_client.os.path.exists')
-    @mock.patch('backend_fitbit_client.input')
+    @mock.patch('fitbit_client.yaml')
+    @mock.patch('fitbit_client.requests')
+    @mock.patch('fitbit_client.os.path.exists')
+    @mock.patch('fitbit_client.input')
     def test_connection_failure(
             self, _, exists_mock, requests_mock, yaml_mock
     ):
@@ -196,7 +196,7 @@ class TestBackendFitbitCaller(unittest.TestCase):
 
         self.assertRaises(
             ConnectionError,
-            BackendFitbitClient,
+            FitbitClient,
         )
 
         assert yaml_mock.dump.call_count == 0

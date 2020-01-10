@@ -211,18 +211,3 @@ class BackendFitbitClient:
         return date.strftime('%Y-%m-%d')
 
 
-if __name__ == '__main__':
-
-    logging.basicConfig(level=logging.INFO)
-
-    client_id_ = "22BBNN"
-    code_ = "fd4edb10e3c69581622fef73f2d1147ad8ebdb27"
-    authorization_ = "MjJCQk5OOjUzMGRlYmI5YjA0OGVmODgwMTI3OWQxYmM2YzY5NzU1"
-    fitbit_caller = BackendFitbitClient(
-        client_id=client_id_,
-        code=code_,
-        authorization=authorization_,
-        is_run_setup=True
-    )
-    print(fitbit_caller.get_steps())
-    print(fitbit_caller.get_last_sync())

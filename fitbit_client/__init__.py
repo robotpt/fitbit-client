@@ -2,11 +2,10 @@
 
 import requests
 import yaml
-import datetime
 import os
-import pandas
 import textwrap
 import logging
+import base64
 
 
 class FitbitCredentialsError(Exception):
@@ -17,9 +16,22 @@ class FitbitApiError(Exception):
     pass
 
 
+class FitbitTokenError(Exception):
+    pass
+
+
+class FitbitTokenExpiredError(Exception):
+    pass
+
+
 class FitbitClient:
 
-    class Oauth2Fields:
+    class UserCredentialKeys:
+        CLIENT_ID = 'client_id'
+        CLIENT_SECRET = 'client_secret'
+        CODE = 'code'
+
+    class Oauth2TokenKeys:
         ACCESS_TOKEN = 'access_token'
         REFRESH_TOKEN = 'refresh_token'
         SCOPE = 'scope'
@@ -28,145 +40,182 @@ class FitbitClient:
     class FitbitApi:
         TOKEN_URL = "https://api.fitbit.com/oauth2/token"
         API_URL = "api.fitbit.com"
-        STEPS_RESOURCE_PATH = "activities/steps"
-        STEPS_DETAIL_LEVEL_1_MIN = "1min"
-        LAST_SYNC_KEY = "lastSyncTime"
+        CONTENT_TYPE = "application/x-www-form-urlencoded"
+        ACCESS_GRANT_TYPE = "authorization_code"
+        REFRESH_GRANT_TYPE = "refresh_token"
+        EXPIRED_TOKEN_ERROR_TYPE = "expired_token"
+
+    CREDENTIALS = [
+        UserCredentialKeys.CLIENT_ID,
+        UserCredentialKeys.CLIENT_SECRET,
+        Oauth2TokenKeys.ACCESS_TOKEN,
+        Oauth2TokenKeys.REFRESH_TOKEN,
+        Oauth2TokenKeys.SCOPE,
+        Oauth2TokenKeys.USER_ID,
+    ]
 
     def __init__(
             self,
-            fitbit_info_file: str = "fitbit_info.yaml",
-            is_run_setup: bool = True,
-            **kwargs,
+            credentials_file_path="fitbit_credentials.yaml",
+            redirect_url="http://localhost",
     ):
-        self._fitbit_info_file = fitbit_info_file
 
-        self._access_token = None
-        self._scope = None
-        self._user_id = None
+        self._credentials_file_path = credentials_file_path
+        self._redirect_url = redirect_url
+        FitbitClient._init_credentials(self._credentials_file_path, self._redirect_url)
 
-        if is_run_setup:
-            self.setup_oaut2_fields(**kwargs)
+    def request_url(self, url):
 
-    def setup_oaut2_fields(self, **kwargs):
+        credentials = self._get_credentials(self._credentials_file_path, self._redirect_url)
+        acccess_token = credentials[FitbitClient.Oauth2TokenKeys.ACCESS_TOKEN]
 
-        is_init_oauth2_token = True
-        if os.path.exists(self._fitbit_info_file):
+        try:
+            response = FitbitClient._request_url(url, acccess_token)
+        except FitbitTokenExpiredError:
+
+            client_id = credentials[FitbitClient.UserCredentialKeys.CLIENT_ID]
+            client_secret = credentials[FitbitClient.UserCredentialKeys.CLIENT_SECRET]
+            refresh_token = credentials[FitbitClient.Oauth2TokenKeys.REFRESH_TOKEN]
+
+            acccess_token = FitbitClient._renew_token(client_id, client_secret, refresh_token)
+            credentials[FitbitClient.Oauth2TokenKeys.ACCESS_TOKEN] = acccess_token
+            FitbitClient._save_dict_to_yaml(credentials, self._credentials_file_path)
+
+            response = FitbitClient._request_url(url, acccess_token)
+
+        return response
+
+    @staticmethod
+    def _request_url(url, authorization_token):
+        response = requests.get(
+            url=url,
+            headers=FitbitClient._get_data_header(
+                authorization_token=authorization_token
+            )
+        ).json()
+        return response
+
+    @staticmethod
+    def _init_credentials(credentials_file_path, redirect_url):
+        _ = FitbitClient._get_credentials(credentials_file_path, redirect_url)
+
+    @staticmethod
+    def _get_credentials(credentials_file_path, redirect_url):
+        if os.path.exists(credentials_file_path):
             try:
-                self._load_oauth2_fields()
-                is_init_oauth2_token = False
+                return FitbitClient._load_dict_from_yaml(credentials_file_path)
             except TypeError:
                 pass
 
-        if is_init_oauth2_token:
-            self._init_oauth2_token(**kwargs)
-            self._save_oauth2_fields()
+        client_id, client_secret, code = FitbitClient._input_user_credentials()
+        user_credentials = {
+            FitbitClient.UserCredentialKeys.CLIENT_ID: client_id,
+            FitbitClient.UserCredentialKeys.CLIENT_SECRET: client_secret,
+        }
 
-    def _load_oauth2_fields(self):
+        oauth_credentials = FitbitClient._init_token(
+            client_id=client_id,
+            client_secret=client_secret,
+            code=code,
+            redirect_url=redirect_url,
+        )
 
-        logging.info("Loading oauth2 fields")
+        credentials = {**user_credentials, **oauth_credentials}
+        FitbitClient._save_dict_to_yaml(credentials, credentials_file_path)
 
-        with open(self._fitbit_info_file, 'r') as f:
+        return credentials
 
-            content = yaml.load(f, Loader=yaml.FullLoader)
-            self._access_token = content[self.Oauth2Fields.ACCESS_TOKEN]
-            self._scope = content[self.Oauth2Fields.SCOPE]
-            self._user_id = content[self.Oauth2Fields.USER_ID]
+    @staticmethod
+    def _init_token(client_id, client_secret, code, redirect_url):
 
-    def _save_oauth2_fields(self):
+        response = requests.post(
+            FitbitClient.FitbitApi.TOKEN_URL,
+            headers=FitbitClient._get_token_header(
+                client_id,
+                client_secret
+            ),
+            data=FitbitClient._get_data_for_init_token(
+                client_id=client_id,
+                redirect_url=redirect_url,
+                code=code,
+            ),
+        ).json()
 
-        assert self._access_token is not None
+        try:
+            FitbitClient._check_response_for_errors(response)
+        except Exception as e:
+            raise FitbitTokenError from e
 
-        logging.info("Saving oauth2 fields")
+        return FitbitClient._get_select_keys_if_they_exist(
+            response,
+            FitbitClient.CREDENTIALS,
+        )
 
-        with open(self._fitbit_info_file, 'w') as f:
-            yaml.dump(
-                {
-                    self.Oauth2Fields.ACCESS_TOKEN: self._access_token,
-                    self.Oauth2Fields.SCOPE: self._scope,
-                    self.Oauth2Fields.USER_ID: self._user_id,
-                },
-                f
-            )
+    @staticmethod
+    def _renew_token(client_id, client_secret, refresh_token):
+        response = requests.post(
+            FitbitClient.FitbitApi.TOKEN_URL,
+            headers=FitbitClient._get_token_header(
+                client_id,
+                client_secret
+            ),
+            data=FitbitClient._get_data_for_refresh_token(
+                refresh_token=refresh_token,
+            ),
+        ).json()
 
-    def _init_oauth2_token(
-            self,
-            client_id: str = None,
-            code: str = None,
-            authorization: str = None,
-            redirect_url: str = "http://localhost",
+        try:
+            FitbitClient._check_response_for_errors(response)
+        except Exception as e:
+            raise FitbitTokenError from e
+
+        return response[FitbitClient.Oauth2TokenKeys.ACCESS_TOKEN]
+
+    @staticmethod
+    def _get_select_keys_if_they_exist(dictionary, select_keys):
+        return {key: dictionary[key] for key in dictionary if key in select_keys}
+
+    @staticmethod
+    def _input_user_credentials(
+            client_id=None,
+            client_secret=None,
+            code=None,
     ):
-
-        logging.info("Initializing oauth2 fields")
-
         if client_id is None:
             client_id = input("Client ID: ")
+        if client_secret is None:
+            client_secret = input("Client Secret: ")
         if code is None:
             code = input("Code: ")
-        if authorization is None:
-            authorization = input("Authorization: ")
 
-        headers = {
-            'Authorization': 'Basic {}'.format(authorization),
-            'Content-Type': 'application/x-www-form-urlencoded'
-        }
-        data = {
-            "clientId": client_id,
-            "grant_type": "authorization_code",
-            "redirect_uri": redirect_url,
-            "code": code,
-        }
+        return client_id, client_secret, code
 
-        response = requests.post(self.FitbitApi.TOKEN_URL, data=data, headers=headers).json()
+    @staticmethod
+    def _check_response_for_errors(response):
+        response_ = response.copy()
 
-        if 'success' in response.keys() and self.Oauth2Fields.ACCESS_TOKEN not in response.keys():
-            if response['success'] is False:
-                error_message = self._get_error_message_from_get_response(response)
-                logging.error(error_message, exc_info=True)
-                raise FitbitCredentialsError(error_message)
-            else:
-                error_message = "If successful, there should be a message, not a 'True' for 'success'"
-                logging.error(error_message, exc_info=True)
-                raise FitbitApiError(error_message)
-        elif 'success' not in response.keys() and self.Oauth2Fields.ACCESS_TOKEN not in response.keys():
-            error_message = "The Fitbit api isn't responding as it should - perhaps check your connection"
-            logging.error(error_message, exc_info=True)
-            raise ConnectionError(error_message)
-        else:
-            self._access_token = response[self.Oauth2Fields.ACCESS_TOKEN]
-            self._scope = response[self.Oauth2Fields.SCOPE]
-            self._user_id = response[self.Oauth2Fields.USER_ID]
+        if type(response_) is not list:
+            response_ = [response_]
 
-    def get_url(self, url):
-        headers = {"Authorization": "Bearer {}".format(self._access_token)}
-        logging.info("GET request to '{}'".format(url))
-        response = requests.get(
-            url=url,
-            headers=headers
-        ).json()
-        self._check_response_for_errors(response)
-        return response
+        for r in response_:
 
-    def get_last_sync(self):
-        url = "https://{api_url}/1/user/{user_id}/devices.json".format(
-            api_url=self.FitbitApi.API_URL,
-            user_id=self._user_id,
-        )
-        response = self.get_url(url)
-        data_idx = 0
-        last_sync_str = response[data_idx][self.FitbitApi.LAST_SYNC_KEY]+"000"  # zeros pad microseconds for parsing
-        str_format = "%Y-%m-%dT%H:%M:%S.%f"
-        return datetime.datetime.strptime(last_sync_str, str_format)
+            if type(r) is not dict:
+                raise TypeError("response should be a dictionary or a list of dictionaries")
 
-    def get_steps(self, date: datetime.date = None):
-        url = "https://{api_url}/1/user/{user_id}/{resource_path}/date/{date}/1d/{detail_level}.json".format(
-            api_url=self.FitbitApi.API_URL,
-            user_id=self._user_id,
-            resource_path=self.FitbitApi.STEPS_RESOURCE_PATH,
-            date=self._date_to_fitbit_date_string(date),
-            detail_level=self.FitbitApi.STEPS_DETAIL_LEVEL_1_MIN,
-        )
-        response = self.get_url(url)
-        return self._steps_response_to_dataframe(response)
+            if 'success' in r.keys():
+                if r['success'] is False:
+                    error_message = FitbitClient._get_error_message_from_get_response(response)
+                    logging.error(error_message, exc_info=True)
+                    if FitbitClient._is_access_token_expired(response):
+                        raise FitbitTokenExpiredError(error_message)
+                    else:
+                        raise FitbitCredentialsError(error_message)
+
+    @staticmethod
+    def _is_access_token_expired(response):
+        for e in response['errors']:
+            if e["errorType"] == FitbitClient.FitbitApi.EXPIRED_TOKEN_ERROR_TYPE:
+                return True
 
     @staticmethod
     def _get_error_message_from_get_response(response):
@@ -178,36 +227,52 @@ class FitbitClient:
         return error_message
 
     @staticmethod
-    def _steps_response_to_dataframe(response):
-        times = []
-        steps = []
-        for i in response['activities-steps-intraday']['dataset']:
-            steps.append(i['value'])
-            times.append(i['time'])
-        return pandas.DataFrame({'Time': times, 'Steps': steps})
+    def _save_dict_to_yaml(dictionary, file_path):
+        with open(file_path, 'w') as f:
+            yaml.dump(dictionary, f)
 
     @staticmethod
-    def _check_response_for_errors(response):
-        response_ = response.copy()
-
-        if type(response_) is not list:
-            response_ = [response_]
-
-        for r in response_:
-            if type(r) is not dict:
-                raise TypeError("response should be a dictionary or a list of dictionaries")
-            if 'success' in r.keys():
-                if r['success'] is False:
-                    error_message = FitbitClient._get_error_message_from_get_response(response)
-                    logging.error(error_message, exc_info=True)
-                    raise FitbitCredentialsError(error_message)
+    def _load_dict_from_yaml(file_path):
+        with open(file_path, 'r') as f:
+            return yaml.load(f, Loader=yaml.FullLoader)
 
     @staticmethod
-    def _date_to_fitbit_date_string(date: datetime.date = None):
+    def _get_token_header(client_id, client_secret):
+        return {
+            'Authorization': 'Basic {}'.format(
+                FitbitClient._get_authorization(client_id, client_secret)
+            ),
+            'Content-Type': FitbitClient.FitbitApi.CONTENT_TYPE,
+        }
 
-        if date is None:
-            return "today"
+    @staticmethod
+    def _get_data_header(authorization_token):
+        return {
+            'Authorization': 'Bearer {}'.format(authorization_token),
+        }
 
-        return date.strftime('%Y-%m-%d')
+    @staticmethod
+    def _get_data_for_init_token(client_id, redirect_url, code):
+        return {
+            "clientId": client_id,
+            "grant_type": FitbitClient.FitbitApi.ACCESS_GRANT_TYPE,
+            "redirect_uri": redirect_url,
+            "code": code,
+        }
 
+    @staticmethod
+    def _get_data_for_refresh_token(refresh_token):
+        return {
+            "refresh_token": refresh_token,
+            "grant_type": FitbitClient.FitbitApi.REFRESH_GRANT_TYPE,
+        }
 
+    @staticmethod
+    def _get_authorization(client_id, client_secret):
+        format_ = "utf-8"
+        return base64.b64encode(
+            "{id}:{secret}".format(
+                id=client_id,
+                secret=client_secret
+            ).encode(format_)
+        ).decode(format_)

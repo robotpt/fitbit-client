@@ -70,6 +70,7 @@ class FitbitClient:
 
         try:
             response = FitbitClient._request_url(url, access_token)
+            self._check_response_for_errors(response)
         except FitbitTokenExpiredError:
 
             client_id = credentials[FitbitClient.UserCredentialKeys.CLIENT_ID]
@@ -81,6 +82,7 @@ class FitbitClient:
             FitbitClient._save_dict_to_yaml(credentials, self._credentials_file_path)
 
             response = FitbitClient._request_url(url, access_token)
+            self._check_response_for_errors(response)
 
         return response
 

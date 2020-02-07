@@ -39,7 +39,6 @@ class FitbitClient:
 
     class FitbitApi:
         TOKEN_URL = "https://api.fitbit.com/oauth2/token"
-        API_URL = "api.fitbit.com"
         CONTENT_TYPE = "application/x-www-form-urlencoded"
         ACCESS_GRANT_TYPE = "authorization_code"
         REFRESH_GRANT_TYPE = "refresh_token"
@@ -67,21 +66,21 @@ class FitbitClient:
     def request_url(self, url):
 
         credentials = self._get_credentials(self._credentials_file_path, self._redirect_url)
-        acccess_token = credentials[FitbitClient.Oauth2TokenKeys.ACCESS_TOKEN]
+        access_token = credentials[FitbitClient.Oauth2TokenKeys.ACCESS_TOKEN]
 
         try:
-            response = FitbitClient._request_url(url, acccess_token)
+            response = FitbitClient._request_url(url, access_token)
         except FitbitTokenExpiredError:
 
             client_id = credentials[FitbitClient.UserCredentialKeys.CLIENT_ID]
             client_secret = credentials[FitbitClient.UserCredentialKeys.CLIENT_SECRET]
             refresh_token = credentials[FitbitClient.Oauth2TokenKeys.REFRESH_TOKEN]
 
-            acccess_token = FitbitClient._renew_token(client_id, client_secret, refresh_token)
-            credentials[FitbitClient.Oauth2TokenKeys.ACCESS_TOKEN] = acccess_token
+            access_token = FitbitClient._renew_token(client_id, client_secret, refresh_token)
+            credentials[FitbitClient.Oauth2TokenKeys.ACCESS_TOKEN] = access_token
             FitbitClient._save_dict_to_yaml(credentials, self._credentials_file_path)
 
-            response = FitbitClient._request_url(url, acccess_token)
+            response = FitbitClient._request_url(url, access_token)
 
         return response
 

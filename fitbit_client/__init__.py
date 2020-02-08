@@ -77,8 +77,9 @@ class FitbitClient:
             client_secret = credentials[FitbitClient.UserCredentialKeys.CLIENT_SECRET]
             refresh_token = credentials[FitbitClient.Oauth2TokenKeys.REFRESH_TOKEN]
 
-            access_token = FitbitClient._renew_token(client_id, client_secret, refresh_token)
+            access_token, refresh_token = FitbitClient._renew_token(client_id, client_secret, refresh_token)
             credentials[FitbitClient.Oauth2TokenKeys.ACCESS_TOKEN] = access_token
+            credentials[FitbitClient.Oauth2TokenKeys.REFRESH_TOKEN] = refresh_token
             FitbitClient._save_dict_to_yaml(credentials, self._credentials_file_path)
 
             response = FitbitClient._request_url(url, access_token)
@@ -170,7 +171,7 @@ class FitbitClient:
         except Exception as e:
             raise FitbitTokenError from e
 
-        return response[FitbitClient.Oauth2TokenKeys.ACCESS_TOKEN]
+        return response[FitbitClient.Oauth2TokenKeys.ACCESS_TOKEN], response[FitbitClient.Oauth2TokenKeys.REFRESH_TOKEN]
 
     @staticmethod
     def _get_select_keys_if_they_exist(dictionary, select_keys):

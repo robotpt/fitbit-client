@@ -183,6 +183,7 @@ class FitbitClient:
             client_secret=None,
             code=None,
     ):
+        print("Input Fitbit credentials")
         if client_id is None:
             client_id = input("Client ID: ")
         if client_secret is None:

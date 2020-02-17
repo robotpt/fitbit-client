@@ -24,6 +24,10 @@ class FitbitTokenExpiredError(Exception):
     pass
 
 
+class FitbitTooManyCallsError(Exception):
+    pass
+
+
 class FitbitClient:
 
     class UserCredentialKeys:
@@ -43,6 +47,7 @@ class FitbitClient:
         ACCESS_GRANT_TYPE = "authorization_code"
         REFRESH_GRANT_TYPE = "refresh_token"
         EXPIRED_TOKEN_ERROR_TYPE = "expired_token"
+        TOO_MANY_CALLS_ERROR = "Too Many Requests"
 
     CREDENTIALS = [
         UserCredentialKeys.CLIENT_ID,
@@ -211,6 +216,8 @@ class FitbitClient:
                     logging.error(error_message, exc_info=True)
                     if FitbitClient._is_access_token_expired(response):
                         raise FitbitTokenExpiredError(error_message)
+                    elif FitbitClient._is_too_many_requests(response):
+                        raise FitbitTooManyCallsError(error_message)
                     else:
                         raise FitbitCredentialsError(error_message)
 
@@ -219,6 +226,14 @@ class FitbitClient:
         for e in response['errors']:
             if e["errorType"] == FitbitClient.FitbitApi.EXPIRED_TOKEN_ERROR_TYPE:
                 return True
+        return False
+
+    @staticmethod
+    def _is_too_many_requests(response):
+        for e in response['errors']:
+            if e["message"] == FitbitClient.FitbitApi.TOO_MANY_CALLS_ERROR:
+                return True
+        return False
 
     @staticmethod
     def _get_error_message_from_get_response(response):

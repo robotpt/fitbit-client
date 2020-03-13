@@ -28,6 +28,10 @@ class FitbitTooManyCallsError(Exception):
     pass
 
 
+class FitbitNoDeviceRegisteredToAccount(Exception):
+    pass
+
+
 class FitbitClient:
 
     class UserCredentialKeys:
@@ -204,6 +208,9 @@ class FitbitClient:
 
         if type(response_) is not list:
             response_ = [response_]
+
+        if not response:
+            raise FitbitNoDeviceRegisteredToAccount("Make sure you register a Fitbit device to the account")
 
         for r in response_:
 
